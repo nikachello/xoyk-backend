@@ -1,10 +1,12 @@
-export type Player = {
-  id: number;
+export interface Player {
+  id: string;
   name: string;
-  char: string;
+  char: "X" | "O" | "Y" | "K";
   connected: boolean;
   lastSeen: number;
-};
+  socketId?: string;
+  disconnectTimer?: NodeJS.Timeout;
+}
 
 export type Coord = { row: number; col: number };
 

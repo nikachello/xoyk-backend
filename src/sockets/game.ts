@@ -8,7 +8,7 @@ const DISCONNECT_GRACE_MS = 30_000;
 
 export function gameSocket(io: Server, socket: Socket) {
   /* ===========================
-     JOIN / REJOIN ROOM
+       JOIN / REJOIN ROOM
   ============================ */
   socket.on(
     "joinRoom",
@@ -26,6 +26,7 @@ export function gameSocket(io: Server, socket: Socket) {
         player.char = chars[0];
         player.connected = true;
         player.lastSeen = Date.now();
+        player.socketId = socket.id;
 
         state = roomManager.createRoom(roomId, [player]);
       }
@@ -33,18 +34,26 @@ export function gameSocket(io: Server, socket: Socket) {
       else {
         const existingPlayer = state.players.find((p) => p.id === player.id);
 
-        // New player
         if (!existingPlayer) {
+          // New player joins
           player.char = chars[state.players.length % chars.length];
           player.connected = true;
           player.lastSeen = Date.now();
+          player.socketId = socket.id;
 
           state.players.push(player);
-        }
-        // Reconnecting player
-        else {
+        } else {
+          // Reconnecting player
           existingPlayer.connected = true;
           existingPlayer.lastSeen = Date.now();
+          existingPlayer.socketId = socket.id;
+
+          // Cancel any pending disconnect cleanup
+          if (existingPlayer.disconnectTimer) {
+            clearTimeout(existingPlayer.disconnectTimer);
+            existingPlayer.disconnectTimer = undefined;
+          }
+
           player.char = existingPlayer.char;
         }
 
@@ -56,22 +65,22 @@ export function gameSocket(io: Server, socket: Socket) {
   );
 
   /* ===========================
-     GAME MOVE
+       GAME MOVE
   ============================ */
-  socket.on("makeMove", ({ roomId, row, col, playerId }) => {
+  socket.on("makeMove", ({ row, col }) => {
+    const roomId = socket.data.roomId;
+    const playerId = socket.data.playerId;
+
+    if (!roomId || !playerId) return;
+
     const state = roomManager.getRoom(roomId);
     if (!state || state.winner) return;
 
     const activePlayer = state.players[state.currentTurn];
 
-    // Must be connected & correct turn
-    if (
-      !activePlayer ||
-      activePlayer.id !== playerId ||
-      !activePlayer.connected
-    ) {
-      return;
-    }
+    // Only allow move if active player is connected
+    if (!activePlayer.connected) return;
+    if (activePlayer.id !== playerId) return;
 
     if (state.board[row][col] !== "") return;
 
@@ -91,7 +100,7 @@ export function gameSocket(io: Server, socket: Socket) {
   });
 
   /* ===========================
-     GRACEFUL DISCONNECT (MOBILE SAFE)
+       GRACEFUL DISCONNECT (MOBILE SAFE)
   ============================ */
   socket.on("disconnect", () => {
     const { roomId, playerId } = socket.data;
@@ -104,31 +113,32 @@ export function gameSocket(io: Server, socket: Socket) {
     const player = state.players.find((p) => p.id === playerId);
     if (!player) return;
 
-    // Mark player offline
+    // Ignore disconnect from stale socket
+    if (player.socketId !== socket.id) return;
+
+    // Mark offline
     player.connected = false;
     player.lastSeen = Date.now();
 
     roomManager.setRoomState(roomId, state);
     io.to(roomId).emit("gameUpdate", state);
 
-    // Delayed cleanup (grace period)
-    setTimeout(() => {
+    // Schedule delayed cleanup
+    player.disconnectTimer = setTimeout(() => {
       const latest = roomManager.getRoom(roomId);
       if (!latest) return;
 
-      const stillOffline = latest.players.find(
-        (p) => p.id === playerId && !p.connected
-      );
+      const idx = latest.players.findIndex((p) => p.id === playerId);
+      if (idx === -1) return;
 
-      if (!stillOffline) return;
-
-      // Remove player permanently
-      latest.players = latest.players.filter((p) => p.id !== playerId);
-
-      // Fix turn index
-      if (latest.currentTurn >= latest.players.length) {
-        latest.currentTurn = 0;
+      // Adjust turn safely
+      if (latest.currentTurn > idx) {
+        latest.currentTurn--;
+      } else if (latest.currentTurn === idx) {
+        latest.currentTurn %= Math.max(1, latest.players.length - 1);
       }
+
+      latest.players.splice(idx, 1);
 
       roomManager.setRoomState(roomId, latest);
       io.to(roomId).emit("gameUpdate", latest);
