@@ -21,7 +21,6 @@ router.post("/join/:roomId", (req, res) => {
   const { roomId } = req.params;
   const player: Player = req.body.player;
 
-  // 1. Validation: Ensure player has a name and ID
   if (!player || !player.name || !player.id) {
     return res.status(400).json({ error: "Invalid player data" });
   }
@@ -36,7 +35,6 @@ router.post("/join/:roomId", (req, res) => {
       return res.status(400).json({ error: "Room is full" });
     }
 
-    // 2. Assign the character HERE based on the current length
     const chars: ("X" | "O" | "Y" | "K")[] = ["X", "O", "Y", "K"];
     player.char = chars[state.players.length];
 

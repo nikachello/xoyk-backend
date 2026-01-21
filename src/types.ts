@@ -2,6 +2,8 @@ export type Player = {
   id: number;
   name: string;
   char: string;
+  connected: boolean;
+  lastSeen: number;
 };
 
 export type Coord = { row: number; col: number };
