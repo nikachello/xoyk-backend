@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Request, Response, Router } from "express";
 import { roomManager } from "../rooms";
 import { Player } from "../types";
 import { randomUUID } from "crypto";
 
 const router = Router();
 
-router.post("/", (req, res) => {
+router.post("/", (req: Request, res: Response) => {
   const player: Player = req.body.player;
   if (!player) return res.status(400).json({ error: "Player required" });
 
@@ -17,7 +17,7 @@ router.post("/", (req, res) => {
   res.json({ roomId, state });
 });
 
-router.post("/join/:roomId", (req, res) => {
+router.post("/join/:roomId", (req: Request, res: Response) => {
   const { roomId } = req.params;
   const player: Player = req.body.player;
 
