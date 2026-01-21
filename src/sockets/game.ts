@@ -35,8 +35,13 @@ export function gameSocket(io: Server, socket: Socket) {
         const existingPlayer = state.players.find((p) => p.id === player.id);
 
         if (!existingPlayer) {
-          // New player joins
-          player.char = chars[state.players.length % chars.length];
+          // Assign first unused char
+          const usedChars = new Set(state.players.map((p) => p.char));
+          const nextChar =
+            chars.find((c) => !usedChars.has(c)) ??
+            chars[state.players.length % chars.length];
+
+          player.char = nextChar;
           player.connected = true;
           player.lastSeen = Date.now();
           player.socketId = socket.id;
@@ -54,7 +59,7 @@ export function gameSocket(io: Server, socket: Socket) {
             existingPlayer.disconnectTimer = undefined;
           }
 
-          player.char = existingPlayer.char;
+          player.char = existingPlayer.char; // preserve original char
         }
 
         roomManager.setRoomState(roomId, state);
